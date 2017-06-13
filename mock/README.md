@@ -2,7 +2,7 @@
 
 Simple FastCGI golang implemented Json Mock in order to 'fake' validated json requests/responses.
 
-![Mock Server](/images/mockServer.jpeg)
+![Mock Server](images/mockServer.jpeg)
 
 Although the main development environment was **Linux** (debian/opensuse), some tips will be provided for your **Windows** and **Apple** boxes. Being a testing tool, we'd better try to be able to work on different operating systems.
 
@@ -10,7 +10,7 @@ Although the main development environment was **Linux** (debian/opensuse), some 
 
 This simple **Json Mock** aims at **validating** not only the *real* server against *fake* or *real* clients but also let us change our **code under testing** without modifing already validated **data** or **testing structure**:
 
-![Component Diagram](/images/component_diagram.png)
+![Component Diagram](images/component_diagram.png)
 
 Pay special attention to the fact that **Fake Queries** and all **Json Schemas** are just **JSON** files that can be externally validated with your favourite tools and be reused in your REAL code or in CLIENT test cases.
 
