@@ -1,13 +1,11 @@
-#include <boost/asio.hpp>
-#include <boost/filesystem.hpp>
-
 #include <fstream>
 #include <atomic>
 #include <thread>
 #include <iostream>
 #include <mutex>
 
-using namespace boost;
+#include <boost/asio.hpp>
+#include <boost/filesystem.hpp>
 
 class Service {
 	static const std::map<unsigned int, std::string>
@@ -22,7 +20,7 @@ public:
 	{};
 
 	void start_handling() {
-		asio::async_read_until(*m_sock.get(),
+		boost::asio::async_read_until(*m_sock.get(),
 			m_request,
 			"\r\n",
 			[this](
@@ -44,7 +42,7 @@ private:
 				<< ec.value()
 				<< ". Message: " << ec.message();
 
-			if (ec == asio::error::not_found) {
+			if (ec == boost::asio::error::not_found) {
 				// No delimiter has been fonud in the
 				// request message.
 
@@ -73,6 +71,13 @@ private:
 		std::istringstream request_line_stream(request_line);
 		request_line_stream >> request_method;
 
+		// Header as a cheap 'ping'
+		if (request_method.compare("HEAD") == 0) {
+			m_response_status_code = 200;
+			send_response();
+			return;
+		}
+
 		// We only support POST method.
 		if (request_method.compare("POST") != 0) {
 			// Unsupported method.
@@ -97,7 +102,7 @@ private:
 
 		// At this point the request line is successfully
 		// received and parsed. Now read the request headers and body.
-		asio::async_read_until(*m_sock.get(),
+		boost::asio::async_read_until(*m_sock.get(),
 			m_request,
 			"\r\n\r\n",
 			[this](
@@ -117,7 +122,7 @@ private:
 				<< ec.value()
 				<< ". Message: " << ec.message();
 
-			if (ec == asio::error::not_found) {
+			if (ec == boost::asio::error::not_found) {
 				// No delimiter has been fonud in the
 				// request message.
 
@@ -184,25 +189,25 @@ std::cout << body << "\n";
 
 	void send_response(const std::string& body = "")  {
 
-		m_sock->shutdown( asio::ip::tcp::socket::shutdown_receive);
+		m_sock->shutdown( boost::asio::ip::tcp::socket::shutdown_receive);
 		auto status_line = http_status_table.at(m_response_status_code);
 
 		m_response_status_line = std::string("HTTP/1.1 ") + status_line + "\r\n";
 		m_response_headers += "\r\n";
 
-		std::vector<asio::const_buffer> response_buffers;
-		response_buffers.push_back( asio::buffer(m_response_status_line) );
+		std::vector<boost::asio::const_buffer> response_buffers;
+		response_buffers.push_back( boost::asio::buffer(m_response_status_line) );
 
 		if (m_response_headers.length() > 0) {
-			response_buffers.push_back( asio::buffer(m_response_headers) );
+			response_buffers.push_back( boost::asio::buffer(m_response_headers) );
 		}
 
 		if (body.size() > 0) {
-			response_buffers.push_back( asio::buffer(body.c_str(), body.size()));
+			response_buffers.push_back( boost::asio::buffer(body.c_str(), body.size()));
 		}
 
 		// Initiate asynchronous write operation.
-		asio::async_write(*m_sock.get(),
+		boost::asio::async_write(*m_sock.get(),
 			response_buffers,
 			[this](
 			const boost::system::error_code& ec,
@@ -222,7 +227,7 @@ std::cout << body << "\n";
 				<< ". Message: " << ec.message();
 		}
 
-		m_sock->shutdown(asio::ip::tcp::socket::shutdown_both);
+		m_sock->shutdown(boost::asio::ip::tcp::socket::shutdown_both);
 
 		on_finish();
 	}
@@ -257,11 +262,11 @@ Service::http_status_table =
 
 class Acceptor {
 public:
-	Acceptor(asio::io_service& ios, unsigned short port_num) :
+	Acceptor(boost::asio::io_service& ios, unsigned short port_num) :
 		m_ios(ios),
 		m_acceptor(m_ios,
-		asio::ip::tcp::endpoint(
-		asio::ip::address_v4::any(),
+		boost::asio::ip::tcp::endpoint(
+		boost::asio::ip::address_v4::any(),
 		port_num)),
 		m_isStopped(false)
 	{}
@@ -279,8 +284,8 @@ public:
 
 private:
 	void InitAccept() {
-		std::shared_ptr<asio::ip::tcp::socket>
-			sock(new asio::ip::tcp::socket(m_ios));
+		std::shared_ptr<boost::asio::ip::tcp::socket>
+			sock(new boost::asio::ip::tcp::socket(m_ios));
 
 		m_acceptor.async_accept(*sock.get(),
 			[this, sock](
@@ -291,7 +296,7 @@ private:
 	}
 
 	void onAccept(const boost::system::error_code& ec,
-		std::shared_ptr<asio::ip::tcp::socket> sock)
+		std::shared_ptr<boost::asio::ip::tcp::socket> sock)
 	{
 		if (ec == 0) {
 			(new Service(sock))->start_handling();
@@ -315,15 +320,15 @@ private:
 	}
 
 private:
-	asio::io_service& m_ios;
-	asio::ip::tcp::acceptor m_acceptor;
+	boost::asio::io_service& m_ios;
+	boost::asio::ip::tcp::acceptor m_acceptor;
 	std::atomic<bool> m_isStopped;
 };
 
 class Server {
 public:
 	Server() {
-		m_work.reset(new asio::io_service::work(m_ios));
+		m_work.reset(new boost::asio::io_service::work(m_ios));
 	}
 
 	// Start the server.
@@ -360,38 +365,8 @@ public:
 	}
 
 private:
-	asio::io_service m_ios;
-	std::unique_ptr<asio::io_service::work> m_work;
+	boost::asio::io_service m_ios;
+	std::unique_ptr<boost::asio::io_service::work> m_work;
 	std::unique_ptr<Acceptor> acc;
 	std::vector<std::unique_ptr<std::thread>> m_thread_pool;
 };
-
-const unsigned int DEFAULT_THREAD_POOL_SIZE = 2;
-
-int main()
-{
-	unsigned short port_num = 7777;
-
-	try {
-		Server srv;
-
-		unsigned int thread_pool_size =
-			std::thread::hardware_concurrency() * 2;
-
-		if (thread_pool_size == 0)
-			thread_pool_size = DEFAULT_THREAD_POOL_SIZE;
-
-		srv.Start(port_num, thread_pool_size);
-
-		std::this_thread::sleep_for(std::chrono::seconds(60));
-
-		srv.Stop();
-	}
-	catch (system::system_error &e) {
-		std::cout << "Error occured! Error code = "
-			<< e.code() << ". Message: "
-			<< e.what();
-	}
-
-	return 0;
-}
