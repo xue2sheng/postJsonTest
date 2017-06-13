@@ -1,4 +1,4 @@
-#include <fstream>
+﻿#include <fstream>
 #include <atomic>
 #include <thread>
 #include <iostream>
@@ -16,14 +16,14 @@ public:
 	Service(std::shared_ptr<boost::asio::ip::tcp::socket> sock) :
 		m_sock(sock),
 		m_request(8192),
-		m_response_status_code(200), // Assume success.
-		m_resource_size_bytes(0)
+		m_response_status_code(200) // Assume success.
 	{};
 
 	void start_handling() {
+
 		boost::asio::async_read_until(*m_sock.get(),
 			m_request,
-			"\r\n",
+			"\r\n\r\n",
 			[this](
 			const boost::system::error_code& ec,
 			std::size_t bytes_transferred)
@@ -31,6 +31,7 @@ public:
 			on_request_line_received(ec,
 				bytes_transferred);
 		});
+
 	}
 
 private:
@@ -53,7 +54,7 @@ private:
 				return;
 			}
 			else {
-				// In case of any other error �
+				// In case of any other error
 				// close the socket and clean up.
 				on_finish();
 				return;
@@ -101,6 +102,9 @@ private:
 			return;
 		}
 
+
+
+
 		// At this point the request line is successfully
 		// received and parsed. Now read the request headers and body.
 		boost::asio::async_read_until(*m_sock.get(),
@@ -141,22 +145,16 @@ private:
 
 		// Parse headers and body.
 		std::istream request_stream(&m_request);
-		std::string whole_line;
-		request_stream >> whole_line;
-
-std::cout << whole_line;
-
-/*
 		std::string whole_line, body;
 
 		bool start_body {false}; // hopefully json format
 		bool json_content {false}; // activate parsing for json
 
 		do {
-			whole_line = request_stream.;
+			request_stream >> whole_line;
 
 			// awkish triggers to detect json data
-			if( not json_content && whole_line.find("JSON") != std::string::npos || whole_line.find("json") != std::string::npos ) { json_content = true; }
+			if( not json_content && whole_line.find("application/json") != std::string::npos ) { json_content = true; }
 			if( not start_body && json_content && whole_line.find("{") != std::string::npos ) { start_body = true; }
 
 			if( start_body ) { body += whole_line; }
@@ -165,13 +163,12 @@ std::cout << whole_line;
 
 		request_stream >> whole_line;
 		body += whole_line;
-std::cout << body << "\n";
-*/
+
+{ static std::mutex m; std::lock_guard<std::mutex>{m}; std::cout << "Body: \"" << body << "\"\n"; }
+
 		// Now we have all we need to process the request.
-		//process_request(body);
-		process_request();
-		//send_response(body);
-		send_response();
+		process_request(body);
+		send_response(body);
 
 		return;
 	}
@@ -240,12 +237,11 @@ std::cout << body << "\n";
 
 private:
 	std::shared_ptr<boost::asio::ip::tcp::socket> m_sock;
-	boost::asio::streambuf m_request;
+	boost::asio::streambuf m_request{1024};
 	std::string m_requested_resource;
 
 	std::unique_ptr<char[]> m_resource_buffer;
 	unsigned int m_response_status_code;
-	std::size_t m_resource_size_bytes;
 	std::string m_response_headers;
 	std::string m_response_status_line;
 };

@@ -15,6 +15,8 @@ int main()
 
 		if (thread_pool_size == 0) { thread_pool_size = DEFAULT_THREAD_POOL_SIZE; }
 
+		std::cout << "Using port " << port_num << " with " << thread_pool_size << " thread pool size\n";
+
 		srv.Start(port_num, thread_pool_size);
 
 		std::this_thread::sleep_for(std::chrono::seconds(60));
