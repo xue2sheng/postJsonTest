@@ -15,7 +15,7 @@ class Service {
 public:
 	Service(std::shared_ptr<boost::asio::ip::tcp::socket> sock) :
 		m_sock(sock),
-		m_request(8192),
+		m_request(4096),
 		m_response_status_code(200) // Assume success.
 	{};
 
@@ -179,9 +179,20 @@ private:
 		// maybe the request body was greater than bytes_transferred and it's missing a part of that content body
 		if( content_body.size() < content_length ) {
 
-			{ static std::mutex m; std::lock_guard<std::mutex>{m}; std::cout << "Content Body Size: \"" << content_body.size() << "\"\n"; }
-			process_request(content_body);
-			send_response(content_body);
+			std::unique_ptr<char[]> buf;
+			unsigned long remaining_length = (content_length - content_body.size());
+			buf.reset(new char[remaining_length]);
+
+			// one read wasn't enough
+			m_sock.get()->async_read_some(
+				boost::asio::buffer(buf.get(), remaining_length),
+				[this](
+				const boost::system::error_code& ec,
+				std::size_t bytes_transferred)
+			{
+				process_request("{}");
+				send_response("{}");
+			});
 
 		} else {
 			// Now we have all we need to process the request.
