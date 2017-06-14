@@ -23,7 +23,7 @@ public:
 
 		boost::asio::async_read_until(*m_sock.get(),
 			m_request,
-			"\r\n\r\n",
+			"\r\n",
 			[this](
 			const boost::system::error_code& ec,
 			std::size_t bytes_transferred)
@@ -89,7 +89,8 @@ private:
 			return;
 		}
 
-		request_line_stream >> m_requested_resource;
+		std::string ignore_parameters;
+		request_line_stream >> ignore_parameters;
 
 		std::string request_http_version;
 		request_line_stream >> request_http_version;
@@ -102,7 +103,20 @@ private:
 			return;
 		}
 
-
+		// Read Content-length to read all body info later on
+		unsigned long content_length{0};
+		do {
+			 std::getline(request_stream, request_line, '\r');
+			 if( request_line.find("Content-Length: ") != std::string::npos ) {
+				content_length = std::stoul(request_line.substr(std::string{"Content-Length: "}.size()));
+				break;
+			 }
+		} while( !request_stream.eof() );
+		if( content_length == 0 ) {
+			// response with empty body if not content length present
+			process_request();
+			send_response();
+		}
 
 
 		// At this point the request line is successfully
@@ -110,17 +124,17 @@ private:
 		boost::asio::async_read_until(*m_sock.get(),
 			m_request,
 			"\r\n\r\n",
-			[this](
+			[this, content_length](
 			const boost::system::error_code& ec,
 			std::size_t bytes_transferred)
 		{
-			on_request_received(ec, bytes_transferred);
+			on_request_received(ec, bytes_transferred, content_length);
 		});
 
 		return;
 	}
 
-	void on_request_received(const boost::system::error_code& ec, std::size_t bytes_transferred)
+	void on_request_received(const boost::system::error_code& ec, std::size_t bytes_transferred, unsigned long content_length)
 	{
 		if (ec != 0) {
 			std::cout << "Error occured! Error code = "
@@ -145,30 +159,35 @@ private:
 
 		// Parse headers and body.
 		std::istream request_stream(&m_request);
-		std::string whole_line, body;
+		std::string whole_line, content_body;
 
-		bool start_body {false}; // hopefully json format
-		bool json_content {false}; // activate parsing for json
 
-		do {
-			request_stream >> whole_line;
+			bool start_body {false}; // hopefully json format
+			bool json_content {false}; // activate parsing for json
+			do {
+				request_stream >> whole_line;
 
-			// awkish triggers to detect json data
-			if( not json_content && whole_line.find("application/json") != std::string::npos ) { json_content = true; }
-			if( not start_body && json_content && whole_line.find("{") != std::string::npos ) { start_body = true; }
+				// awkish triggers to detect json data
+				if( not json_content && whole_line.find("application/json") != std::string::npos ) { json_content = true; }
+				if( not start_body && json_content && whole_line.find("{") != std::string::npos ) { start_body = true; }
 
-			if( start_body ) { body += whole_line; }
+				if( start_body ) { content_body += whole_line; }
 
-		} while (!request_stream.eof());
+			} while (!request_stream.eof());
 
-		request_stream >> whole_line;
-		body += whole_line;
 
-{ static std::mutex m; std::lock_guard<std::mutex>{m}; std::cout << "Body: \"" << body << "\"\n"; }
+		// maybe the request body was greater than bytes_transferred and it's missing a part of that content body
+		if( content_body.size() < content_length ) {
 
-		// Now we have all we need to process the request.
-		process_request(body);
-		send_response(body);
+			{ static std::mutex m; std::lock_guard<std::mutex>{m}; std::cout << "Content Body Size: \"" << content_body.size() << "\"\n"; }
+			process_request(content_body);
+			send_response(content_body);
+
+		} else {
+			// Now we have all we need to process the request.
+			process_request(content_body);
+			send_response(content_body);
+		}
 
 		return;
 	}
@@ -211,8 +230,7 @@ private:
 			const boost::system::error_code& ec,
 			std::size_t bytes_transferred)
 		{
-			on_response_sent(ec,
-				bytes_transferred);
+			on_response_sent(ec, bytes_transferred);
 		});
 	}
 
@@ -237,8 +255,7 @@ private:
 
 private:
 	std::shared_ptr<boost::asio::ip::tcp::socket> m_sock;
-	boost::asio::streambuf m_request{1024};
-	std::string m_requested_resource;
+	boost::asio::streambuf m_request;
 
 	std::unique_ptr<char[]> m_resource_buffer;
 	unsigned int m_response_status_code;
