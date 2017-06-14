@@ -183,22 +183,18 @@ private:
 			unsigned long remaining_length = (content_length - content_body.size());
 			buf.reset(new char[remaining_length]);
 
-			// one read wasn't enough
-			m_sock.get()->async_read_some(
-				boost::asio::buffer(buf.get(), remaining_length),
-				[this](
-				const boost::system::error_code& ec,
-				std::size_t bytes_transferred)
-			{
-				process_request("{}");
-				send_response("{}");
-			});
+			unsigned long total_bytes_read{0};
+			while( total_bytes_read != remaining_length) {
+				total_bytes_read += m_sock.get()->read_some(boost::asio::buffer(buf.get() + total_bytes_read, remaining_length - total_bytes_read));
+			}
 
-		} else {
-			// Now we have all we need to process the request.
-			process_request(content_body);
-			send_response(content_body);
+			std::string extra(buf.get(), buf.get() + strlen(buf.get()));
+			content_body += extra;
 		}
+
+		// Now we have all we need to process the request.
+		process_request(content_body);
+		send_response(content_body);
 
 		return;
 	}
